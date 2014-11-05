@@ -1,4 +1,4 @@
-package demo;
+package org.projectreactor.oredev.demo;
 
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -37,15 +37,18 @@ public class TestSubscriber implements Subscriber<String> {
 		log.info("onNext: {}", s);
 		if (s.startsWith("Goodbye")) {
 			log.info("stop receiving events...");
-			dispatcher.execute(() -> this.subscription.cancel());
+			dispatcher.execute(() -> {
+				subscription.cancel();
+				subscription = null;
+			});
 		} else {
-			dispatcher.execute(() -> this.subscription.request(1));
+			dispatcher.execute(() -> subscription.request(1));
 		}
 	}
 
 	@Override
 	public void onError(Throwable throwable) {
-
+		log.info("onError: {}", throwable.getMessage(), throwable);
 	}
 
 	@Override

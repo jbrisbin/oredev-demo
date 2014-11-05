@@ -109,7 +109,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
-					<mainClass>org.projectreactor.oredev.org.projectreactor.oredev.org.projectreactor.oredev.demo.DemoApplication</mainClass>
+					<mainClass>org.projectreactor.oredev.org.projectreactor.oredev.org.projectreactor.oredev.org.projectreactor.oredev.demo.DemoApplication</mainClass>
 				</configuration>
 			</plugin>
 		</plugins>
