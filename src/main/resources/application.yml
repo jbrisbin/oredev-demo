@@ -1,0 +1,10 @@
+server:
+  port: ${PORT:5050}
+
+logging:
+  level:
+    com.netflix.discovery: OFF
+
+http:
+  mappers:
+    jsonPrettyPrint: true
