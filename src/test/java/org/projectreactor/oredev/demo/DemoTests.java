@@ -2,8 +2,6 @@ package org.projectreactor.oredev.demo;
 
 import org.junit.After;
 import org.junit.Test;
-import org.reactivestreams.Processor;
-import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Environment;
@@ -12,9 +10,9 @@ import reactor.core.spec.Reactors;
 import reactor.event.Event;
 import reactor.function.Predicate;
 import reactor.rx.Streams;
-import reactor.rx.action.Action;
 import reactor.rx.stream.HotStream;
 
+import static reactor.event.selector.Selectors.$;
 import static reactor.event.selector.Selectors.U;
 
 /**
@@ -31,7 +29,18 @@ public class DemoTests {
 	}
 
 	@Test
-	public void simpleReactor() {
+	public void reactorWithStringSelector() {
+		Reactor reactor = Reactors.reactor(ENV);
+
+		reactor.on($("topic.string"), (Event<String> ev) -> {
+			LOG.info("from consumer: {}", ev);
+		});
+
+		reactor.notify("topic.string", Event.wrap("Hello World!"));
+	}
+
+	@Test
+	public void reactorWithUriSelector() {
 		Reactor reactor = Reactors.reactor(ENV);
 
 		reactor.on(U("/first/{second}/third"), (Event<String> ev) -> {
@@ -47,9 +56,6 @@ public class DemoTests {
 		HotStream<String> str = Streams.defer(ENV);
 
 		str
-				.when(IllegalStateException.class, e -> {
-					LOG.error("error handler: {}", e.getMessage(), e);
-				})
 				.map(String::toUpperCase)
 				.filter(new Predicate<String>() {
 					@Override
@@ -61,22 +67,7 @@ public class DemoTests {
 				.consume(s -> LOG.info("consumed string: {}", s));
 
 		str.broadcastNext("Hello World!");
-		str.broadcastError(new IllegalStateException("oops!"));
 		str.broadcastNext("Goodbye World!");
-		str.broadcastNext("Hello World!");
-		str.broadcastComplete();
-	}
-
-	@Test
-	public void simpleReactiveSubscriber() {
-		HotStream<String> str = Streams.defer(ENV);
-
-		str.subscribe(new TestSubscriber(str.getDispatcher()));
-
-		str.broadcastNext("Hello World!");
-		str.broadcastError(new IllegalStateException("oops!"));
-		str.broadcastNext("Goodbye World!");
-		str.broadcastNext("Hello World!");
 		str.broadcastComplete();
 	}
 

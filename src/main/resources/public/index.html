@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+  <meta charset="UTF-8">
+  <title>Øredev Reactor Demo</title>
+  <script type="text/javascript">
+    var ws = new WebSocket("ws://localhost:5050/person/updates");
+    ws.onopen = function (evt) {
+      console.log("opened: ", evt);
+    }
+    ws.onmessage = function (evt) {
+      console.log("message: ", evt.data);
+      document.getElementById("data").innerText += "\n" + evt.data;
+    }
+  </script>
+  <style type="text/css">
+    div#data {
+      font-family: "Courier New", Courier, "Lucida Sans Typewriter", "Lucida Typewriter", monospace;
+    }
+  </style>
+</head>
+<body>
+<h1>Øredev Reactor Demo</h1>
+
+<div id="data"></div>
+</body>
+</html>
