@@ -52,21 +52,20 @@ public class DemoApplication {
 	                              ObjectMapper jsonMapper,
 	                              ModelMapper beanMapper) {
 		return (chain) -> {
-			chain
-					.handler("person", ctx -> ctx.byMethod(spec -> spec
-							.get(c -> c.render(just(c)
-									                   .dispatchOn(cachedDispatcher())
-									                   .map(o -> personRepo.findAll())))
+			chain.handler("person", ctx -> ctx.byMethod(spec -> spec
+					.get(c -> c.render(just(c)
+							                   .dispatchOn(cachedDispatcher())
+							                   .map(o -> personRepo.findAll())))
 
-							.put(c -> c.render(just(c.parse(fromJson(Person.class)))
-									                   .dispatchOn(cachedDispatcher())
-									                   .map(p -> Tuple.of(p, personRepo.findOne(p.getId())))
-									                   .observe(tup -> beanMapper.map(tup.getT1(), tup.getT2()))
-									                   .map(tup -> personRepo.save(tup.getT2()))))
+					.put(c -> c.render(just(c.parse(fromJson(Person.class)))
+							                   .dispatchOn(cachedDispatcher())
+							                   .map(p -> Tuple.of(p, personRepo.findOne(p.getId())))
+							                   .observe(tup -> beanMapper.map(tup.getT1(), tup.getT2()))
+							                   .map(tup -> personRepo.save(tup.getT2()))))
 
-							.post(c -> c.render(just(c.parse(fromJson(Person.class)))
-									                    .dispatchOn(cachedDispatcher())
-									                    .map(personRepo::save)))));
+					.post(c -> c.render(just(c.parse(fromJson(Person.class)))
+							                    .dispatchOn(cachedDispatcher())
+							                    .map(personRepo::save)))));
 
 			chain.handler("person/updates", ctx -> websocketBroadcast(ctx, personStream.map(p -> p.toJson(jsonMapper))));
 		};
