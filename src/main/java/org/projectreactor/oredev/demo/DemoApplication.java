@@ -26,6 +26,7 @@ import reactor.rx.stream.HotStream;
 import static ratpack.jackson.Jackson.fromJson;
 import static ratpack.jackson.Jackson.json;
 import static ratpack.websocket.WebSockets.websocketBroadcast;
+import static reactor.core.Environment.cachedDispatcher;
 import static reactor.core.Environment.get;
 
 @Configuration
@@ -43,7 +44,7 @@ public class DemoApplication {
 
 	@Bean
 	public HotStream<Person> personStream() {
-		return Streams.defer();
+		return (HotStream<Person>) Streams.<Person>defer().dispatchOn(get());
 	}
 
 	@Bean
@@ -53,39 +54,51 @@ public class DemoApplication {
 	                              ModelMapper beanMapper) {
 		return (chain) -> {
 			chain.handler("person", ctx ->
-					ctx.byMethod(spec ->
-							             spec
-									             .get(c -> {
-										             c.render(Streams.just("")
-										                             .dispatchOn(get())
-										                             .map(o -> persons.findAll()));
-									             })
-									             .put(c -> {
-										             Person p = c.parse(fromJson(Person.class));
+					ctx.byMethod(spec -> {
+						spec
+								.get(c -> {
+									c.render(Streams.just(c)
+									                .dispatchOn(cachedDispatcher())
+									                .map(o -> persons.findAll()));
+								})
 
-										             c.render(Streams.just(p.getId())
-										                             .dispatchOn(get())
-										                             .<Person>map(persons::findOne)
-										                             .observe(pers -> beanMapper.map(p, pers))
-										                             .map(persons::save));
-									             })
-									             .post(c -> {
-										             Person p = c.parse(fromJson(Person.class));
+								.post(c -> {
+									c.render(Streams.just(c.parse(fromJson(Person.class)))
+									                .dispatchOn(cachedDispatcher())
+									                .map(persons::save));
+								})
 
-										             c.render(Streams.just(p)
-										                             .dispatchOn(get())
-										                             .map(persons::save)
-										                             .observe(personStream::broadcastNext));
-									             })
-					));
+								.put(c -> {
+									Person pIn = c.parse(fromJson(Person.class));
 
-			chain.handler("person/updates", ctx -> websocketBroadcast(ctx, personStream.map(p -> p.toJson(jsonMapper))));
+									c.render(Streams.just(pIn.getId())
+									                .dispatchOn(cachedDispatcher())
+									                .<Person>map(persons::findOne)
+									                .observe(p -> beanMapper.map(pIn, p))
+									                .map(persons::save));
+								});
+
+					}));
+
+			chain.handler("person/updates", c -> {
+				websocketBroadcast(c, personStream.map(p -> p.toJson(jsonMapper)));
+			});
 		};
 	}
 
 	@Bean
 	public ClientErrorHandler clientErrorHandler() {
 		return (ctx, status) -> LOG.error("client error: {}", status);
+	}
+
+	@Bean
+	public Renderer<Person> personRenderer() {
+		return new RendererSupport<Person>() {
+			@Override
+			public void render(Context ctx, Person p) throws Exception {
+				ctx.render(json(p));
+			}
+		};
 	}
 
 	@Bean
