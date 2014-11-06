@@ -14,20 +14,18 @@ import org.springframework.context.annotation.Configuration;
 import ratpack.error.ClientErrorHandler;
 import ratpack.func.Action;
 import ratpack.handling.Chain;
-import ratpack.handling.Context;
-import ratpack.render.Renderer;
-import ratpack.render.RendererSupport;
 import ratpack.spring.annotation.EnableRatpack;
 import reactor.core.Environment;
 import reactor.rx.Stream;
 import reactor.rx.Streams;
 import reactor.rx.stream.HotStream;
+import reactor.tuple.Tuple;
 
 import static ratpack.jackson.Jackson.fromJson;
-import static ratpack.jackson.Jackson.json;
 import static ratpack.websocket.WebSockets.websocketBroadcast;
 import static reactor.core.Environment.cachedDispatcher;
 import static reactor.core.Environment.get;
+import static reactor.rx.Streams.just;
 
 @Configuration
 @ComponentScan
@@ -37,84 +35,46 @@ public class DemoApplication {
 
 	private static final Logger LOG = LoggerFactory.getLogger(DemoApplication.class);
 
+	private static final Environment ENV;
+
 	static {
-		// init static Environment
-		Environment.initialize();
+		ENV = Environment.initialize();
 	}
 
 	@Bean
-	public HotStream<Person> personStream() {
-		return (HotStream<Person>) Streams.<Person>defer().dispatchOn(get());
+	public HotStream<Person> personRepo() {
+		return Streams.defer(get());
 	}
 
 	@Bean
-	public Action<Chain> handlers(PersonRepository persons,
-	                              HotStream<Person> personStream,
+	public Action<Chain> handlers(PersonRepository personRepo,
+	                              Stream<Person> personStream,
 	                              ObjectMapper jsonMapper,
 	                              ModelMapper beanMapper) {
 		return (chain) -> {
-			chain.handler("person", ctx ->
-					ctx.byMethod(spec -> {
-						spec
-								.get(c -> {
-									c.render(Streams.just(c)
-									                .dispatchOn(cachedDispatcher())
-									                .map(o -> persons.findAll()));
-								})
+			chain
+					.handler("person", ctx -> ctx.byMethod(spec -> spec
+							.get(c -> c.render(just(c)
+									                   .dispatchOn(cachedDispatcher())
+									                   .map(o -> personRepo.findAll())))
 
-								.post(c -> {
-									c.render(Streams.just(c.parse(fromJson(Person.class)))
-									                .dispatchOn(cachedDispatcher())
-									                .map(persons::save));
-								})
+							.put(c -> c.render(just(c.parse(fromJson(Person.class)))
+									                   .dispatchOn(cachedDispatcher())
+									                   .map(p -> Tuple.of(p, personRepo.findOne(p.getId())))
+									                   .observe(tup -> beanMapper.map(tup.getT1(), tup.getT2()))
+									                   .map(tup -> personRepo.save(tup.getT2()))))
 
-								.put(c -> {
-									Person pIn = c.parse(fromJson(Person.class));
+							.post(c -> c.render(just(c.parse(fromJson(Person.class)))
+									                    .dispatchOn(cachedDispatcher())
+									                    .map(personRepo::save)))));
 
-									c.render(Streams.just(pIn.getId())
-									                .dispatchOn(cachedDispatcher())
-									                .<Person>map(persons::findOne)
-									                .observe(p -> beanMapper.map(pIn, p))
-									                .map(persons::save));
-								});
-
-					}));
-
-			chain.handler("person/updates", c -> {
-				websocketBroadcast(c, personStream.map(p -> p.toJson(jsonMapper)));
-			});
+			chain.handler("person/updates", ctx -> websocketBroadcast(ctx, personStream.map(p -> p.toJson(jsonMapper))));
 		};
 	}
 
 	@Bean
 	public ClientErrorHandler clientErrorHandler() {
 		return (ctx, status) -> LOG.error("client error: {}", status);
-	}
-
-	@Bean
-	public Renderer<Person> personRenderer() {
-		return new RendererSupport<Person>() {
-			@Override
-			public void render(Context ctx, Person p) throws Exception {
-				ctx.render(json(p));
-			}
-		};
-	}
-
-	@Bean
-	public Renderer<Stream> streamRenderer() {
-		return new RendererSupport<Stream>() {
-			@Override
-			public void render(Context ctx, Stream s) throws Exception {
-				ctx.promise(f -> s.when(Throwable.class, t -> f.error((Throwable) t))
-				                  .consume(f::success))
-				   .onError(t -> {
-					   ctx.clientError(500);
-					   LOG.error(t.getMessage(), t);
-				   })
-				   .then(o -> ctx.render(json(o)));
-			}
-		};
 	}
 
 	@Bean
