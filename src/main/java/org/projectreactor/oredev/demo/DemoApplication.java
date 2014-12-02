@@ -16,7 +16,6 @@ import ratpack.func.Action;
 import ratpack.handling.Chain;
 import ratpack.spring.annotation.EnableRatpack;
 import reactor.core.Environment;
-import reactor.rx.Stream;
 import reactor.rx.Streams;
 import reactor.rx.stream.HotStream;
 import reactor.tuple.Tuple;
@@ -24,8 +23,6 @@ import reactor.tuple.Tuple;
 import static ratpack.jackson.Jackson.fromJson;
 import static ratpack.websocket.WebSockets.websocketBroadcast;
 import static reactor.core.Environment.cachedDispatcher;
-import static reactor.core.Environment.get;
-import static reactor.rx.Streams.just;
 
 @Configuration
 @ComponentScan
@@ -42,32 +39,37 @@ public class DemoApplication {
 	}
 
 	@Bean
-	public HotStream<Person> personRepo() {
-		return Streams.defer(get());
+	public HotStream<Person> personStream() {
+		return Streams.defer(ENV);
 	}
 
 	@Bean
 	public Action<Chain> handlers(PersonRepository personRepo,
-	                              Stream<Person> personStream,
+	                              HotStream<Person> personStream,
 	                              ObjectMapper jsonMapper,
 	                              ModelMapper beanMapper) {
 		return (chain) -> {
-			chain.handler("person", ctx -> ctx.byMethod(spec -> spec
-					.get(c -> c.render(just(c)
-							                   .dispatchOn(cachedDispatcher())
-							                   .map(o -> personRepo.findAll())))
+			chain.handler("person", ctx -> {
+				ctx.byMethod(spec -> spec
+						.get(c -> c.render(Streams.just(c)
+						                          .dispatchOn(cachedDispatcher())
+						                          .map(o -> personRepo.findAll())))
 
-					.put(c -> c.render(just(c.parse(fromJson(Person.class)))
-							                   .dispatchOn(cachedDispatcher())
-							                   .map(p -> Tuple.of(p, personRepo.findOne(p.getId())))
-							                   .observe(tup -> beanMapper.map(tup.getT1(), tup.getT2()))
-							                   .map(tup -> personRepo.save(tup.getT2()))))
+						.post(c -> c.render(Streams.just(c.parse(fromJson(Person.class)))
+						                           .dispatchOn(cachedDispatcher())
+						                           .<Person>map(personRepo::save)
+						                           .observe(personStream::broadcastNext)))
 
-					.post(c -> c.render(just(c.parse(fromJson(Person.class)))
-							                    .dispatchOn(cachedDispatcher())
-							                    .map(personRepo::save)))));
+						.put(c -> c.render(Streams.just(c.parse(fromJson(Person.class)))
+						                          .dispatchOn(cachedDispatcher())
+						                          .map(p -> Tuple.of(p, personRepo.findOne(p.getId())))
+						                          .observe(tup -> beanMapper.map(tup.getT1(), tup.getT2()))
+						                          .map(tup -> personRepo.save(tup.getT2())))));
+			});
 
-			chain.handler("person/updates", ctx -> websocketBroadcast(ctx, personStream.map(p -> p.toJson(jsonMapper))));
+			chain.handler("person/updates", ctx -> {
+				websocketBroadcast(ctx, personStream.map(p -> p.toJson(jsonMapper)));
+			});
 		};
 	}
 

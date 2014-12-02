@@ -8,6 +8,9 @@
     ws.onopen = function (evt) {
       console.log("opened: ", evt);
     }
+    ws.onclose = function(evt) {
+      console.log("closed: ", evt);
+    }
     ws.onmessage = function (evt) {
       console.log("message: ", evt.data);
       document.getElementById("data").innerText += "\n" + evt.data;

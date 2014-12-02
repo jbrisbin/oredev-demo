@@ -18,7 +18,9 @@ public class StreamRenderer extends RendererSupport<Stream> {
 		ctx.promise(f -> s.when(Throwable.class, t -> f.error((Throwable) t))
 		                  .consume(f::success))
 		   .onError(t -> {
-			   ctx.clientError(500);
+			   ctx.getResponse().status(500);
+			   ctx.getResponse().getHeaders().set("Content-Length", "0");
+			   ctx.getResponse().send();
 			   LoggerFactory.getLogger(getClass()).error(t.getMessage(), t);
 		   })
 		   .then(o -> ctx.render(json(o)));
